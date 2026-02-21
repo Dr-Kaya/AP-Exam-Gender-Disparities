@@ -1,6 +1,6 @@
 # Gender Disparities in Advanced Placement (AP) Exams: Trend Analysis
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Dr-Kaya/AP-Exam-Gender-Disparities/blob/main/AP_Gender_Trend_Analysis.ipynb)
+<a href="https://colab.research.google.com/github/Dr-Kaya/AP-Exam-Gender-Disparities/blob/main/AP_Gender_Trend_Analysis.ipynb" target="_blank"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a>
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ---
@@ -37,7 +37,7 @@ AP-Exam-Gender-Disparities/
 
 Click the badge below to open the notebook directly in Google Colab:
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Dr-Kaya/AP-Exam-Gender-Disparities/blob/main/AP_Gender_Trend_Analysis.ipynb)
+<a href="https://colab.research.google.com/github/Dr-Kaya/AP-Exam-Gender-Disparities/blob/main/AP_Gender_Trend_Analysis.ipynb" target="_blank"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a>
 
 The notebook installs all dependencies automatically, loads the data directly from this GitHub repository, and walks through the full analysis step by step.
 
