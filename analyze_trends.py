@@ -1,26 +1,32 @@
 """
 analyze_trends.py
 =================
-Command-line script for reproducing the Mann–Kendall trend analysis and
+Command-line script for reproducing the Mann-Kendall trend analysis and
 Sen's slope estimation reported in:
 
     "Mapping Gender Disparities in Advanced Academics: Participation and
      Top Achievement Trends Across Advanced Placement (AP) Exams"
 
-Usage
------
-    python analyze_trends.py tapar.csv
-    python analyze_trends.py tapar.csv --output results.csv
+This script replicates the exact pipeline from AP_Gender_Trend_Analysis.ipynb.
+Run against both data files to reproduce Tables 3, 4, and 5:
 
-The script reads the AP gender disparity dataset, runs the Mann–Kendall
-test and Sen's slope estimator for each of the 45 AP exam subjects, prints
-a summary to the console, and (optionally) saves results to CSV/Excel.
+    # Reproduces Table 3 (RQ1 - participation trends)
+    python analyze_trends.py participation.csv --output participation_results
+
+    # Reproduces Table 4 (RQ2 - top achievement trends)
+    python analyze_trends.py top_achievement.csv --output top_achievement_results
+
+    # Reproduces both + Spearman correlation Table 5 (RQ3)
+    python analyze_trends.py participation.csv top_achievement.csv --output results
 
 Dependencies
 ------------
     pip install pandas numpy pymannkendall scipy openpyxl
 
-Author: [Masked for review]
+Repository
+----------
+    https://github.com/Dr-Kaya/AP-Exam-Gender-Disparities
+
 License: MIT
 """
 
@@ -37,191 +43,231 @@ from scipy import stats
 # Data Loading and Preparation
 # ---------------------------------------------------------------------------
 
-def load_and_prepare(csv_path: str) -> pd.DataFrame:
+def load_and_prepare(csv_path):
     """
-    Load the AP gender disparity CSV and prepare it for analysis.
+    Load an AP gender disparity CSV and prepare it for Mann-Kendall analysis.
 
-    The raw CSV is stored with exam subjects as rows and years as columns.
-    This function transposes the data so that each row represents a year
-    and each column an exam subject, making it compatible with time-series
-    analysis functions.
+    The raw CSV stores AP exam subjects as rows and years as columns.
+    This function:
+      1. Loads the CSV
+      2. Transposes so rows = years, columns = exam subjects
+      3. Drops the 'Average' summary column (not a real year)
+      4. Drops any NaN-named columns (from empty rows in the raw file)
+      5. Drops the last row (a pre-computed average row, not a real year)
+      6. Converts all values to numeric
 
     Parameters
     ----------
     csv_path : str
-        Path to the input CSV file (e.g., 'tapar.csv').
+        Path to input CSV ('participation.csv' or 'top_achievement.csv').
 
     Returns
     -------
     pd.DataFrame
-        Cleaned DataFrame with a 'Year' column and one column per AP exam.
-        All values are cast to numeric. The final row (a summary average
-        row present in the raw data) is dropped before analysis.
+        Cleaned DataFrame: rows = years (1997-2020), columns = Year + AP exams.
     """
-    # Step 1: Load the raw CSV
+    # Step 1: Load
     df_raw = pd.read_csv(csv_path)
 
-    # Step 2: Transpose so rows = years, columns = exam subjects
-    df_transposed = df_raw.T
-    header = df_transposed.iloc[0]          # First row after transpose = subject names
-    df_transposed = df_transposed.iloc[1:]  # Drop the header row from data
-    df_transposed.columns = header
-    df_transposed.reset_index(inplace=True)
-    df_transposed.rename(columns={'index': 'Year'}, inplace=True)
+    # Step 2: Transpose - exam subjects become columns, years become rows
+    df2 = df_raw.T
+    header = df2.iloc[0]        # First row after transpose = exam subject names
+    df2 = df2[1:]               # Remove header row from data
+    df2.columns = header
+    df2.reset_index(inplace=True)
+    df2.rename(columns={'index': 'Year'}, inplace=True)
 
-    # Step 3: Keep only the 46 relevant columns (Year + 45 AP exam subjects)
-    df_transposed = df_transposed[df_transposed.columns[:46]]
+    # Step 3: Drop 'Average' summary column
+    if 'Average' in df2.columns:
+        df2 = df2.drop(columns=['Average'])
 
-    # Step 4: Drop the last row (a pre-computed average row in the raw data)
-    df_transposed.drop(index=df_transposed.index[-1], inplace=True)
+    # Step 4: Drop NaN-named columns (empty rows become NaN column names after transpose)
+    df2 = df2.loc[:, df2.columns.notna()]
 
-    # Step 5: Convert all columns to numeric (Year and MFR values)
-    df_clean = df_transposed.apply(pd.to_numeric, errors='coerce')
+    # Step 5: Drop last row (pre-computed average row, not a real year)
+    df2.drop(index=df2.index[-1], inplace=True)
 
-    return df_clean
+    # Step 6: Convert all to numeric
+    df3 = df2.apply(pd.to_numeric, errors='coerce')
+
+    return df3
 
 
 # ---------------------------------------------------------------------------
 # Individual Exam Analysis
 # ---------------------------------------------------------------------------
 
-def analyze_exam(series: pd.Series, years: pd.Series) -> dict:
+def analyze_exam(series):
     """
-    Run the Mann–Kendall test and compute descriptive statistics for one
-    AP exam's gender disparity time series.
+    Run the Mann-Kendall test and compute Sen's slope for one AP exam series.
 
-    The Mann–Kendall (MK) test is a non-parametric test for monotonic
-    trends in time-series data. It makes no assumption about the
-    distribution of the data and is robust to outliers and missing values.
-    Sen's slope provides a robust estimate of the rate of change per year.
+    The Mann-Kendall test is a non-parametric rank-based test for monotonic
+    trends. It makes no distributional assumptions and is robust to outliers
+    and missing values -- well-suited for longitudinal educational data.
+
+    Sen's slope is the median of all pairwise slopes and provides a robust
+    estimate of the rate of change per year.
+
+    NaN values are dropped before testing. Zeros are excluded from min/max
+    statistics as they represent missing/unreported data. A minimum of 3
+    valid observations is required (fewer causes ZeroDivisionError in the
+    Tau calculation).
 
     Parameters
     ----------
     series : pd.Series
-        MFR index values for one AP exam across all years.
-    years : pd.Series
-        Corresponding year values (used to compute a meaningful intercept).
+        MFR index values for one AP exam across years.
 
     Returns
     -------
     dict
-        Dictionary containing:
-        - trend      : 'increasing', 'decreasing', or 'no trend'
-        - p          : p-value of the MK test (two-tailed)
-        - slope      : Sen's slope (MFR units per year)
-        - z          : Standardized MK test statistic
-        - Tau        : Kendall's Tau correlation coefficient
-        - s          : MK S statistic (sum of sign differences)
-        - var_s      : Variance of S
-        - intercept  : Estimated intercept (value at Year = 0 using Sen's slope)
-        - minimum    : Minimum non-zero MFR value in the series
-        - maximum    : Maximum non-zero MFR value in the series
-        - mean       : Mean MFR value
-        - std_dev    : Standard deviation of MFR values
-        - n_obs      : Number of valid observations
+        Mann-Kendall statistics and descriptive measures.
     """
-    # Run the Mann–Kendall original test
-    result = mk.original_test(series)
+    clean = series.dropna()
 
-    # Compute intercept: back-calculate from the last known data point
-    # so the trend line is anchored to observed data
-    intercept = series.iloc[-1] - result.slope * years.iloc[-1]
+    # Require at least 3 observations -- Tau = s / (0.5 * n * (n-1)) divides by zero for n < 2
+    if len(clean) < 3:
+        return {
+            'Trend': 'insufficient data', 'p': None, 'slope': None,
+            'z': None, 'intercept': None, 'Tau': None, 's': None,
+            'var_s': None, 'minimum': None, 'maximum': None,
+            'mean': round(float(clean.mean()), 4) if len(clean) > 0 else None,
+            'SD': None, 'n': int(len(clean)),
+        }
 
-    # Descriptive statistics (excluding zeros, which represent missing data)
-    series_nonzero = series.mask(series == 0)
-    minimum = series_nonzero.min()
-    maximum = series_nonzero.max()
+    # Run Mann-Kendall original test
+    trend, h, p, z, Tau, s, var_s, slope, intercept = mk.original_test(clean)
+
+    # Exclude zeros when computing min/max (zeros = missing data in this dataset)
+    nonzero = series.mask(series == 0)
 
     return {
-        'trend':     result.trend,
-        'p':         round(result.p, 4),
-        'slope':     round(result.slope, 4),
-        'z':         round(result.z, 4),
-        'Tau':       round(result.Tau, 4),
-        's':         result.s,
-        'var_s':     round(result.var_s, 4),
+        'Trend':     trend,
+        'p':         round(p, 4),
+        'slope':     round(slope, 4),
+        'z':         round(z, 4),
         'intercept': round(intercept, 4),
-        'minimum':   round(minimum, 4) if pd.notna(minimum) else None,
-        'maximum':   round(maximum, 4) if pd.notna(maximum) else None,
-        'mean':      round(series.mean(), 4),
-        'std_dev':   round(series.std(), 4),
-        'n_obs':     int(series.count()),
+        'Tau':       round(Tau, 4),
+        's':         int(s),
+        'var_s':     round(var_s, 4),
+        'minimum':   round(float(nonzero.min()), 4),
+        'maximum':   round(float(nonzero.max()), 4),
+        'mean':      round(float(series.mean()), 4),
+        'SD':        round(float(series.std(ddof=1)), 4),
+        'n':         int(clean.count()),
     }
 
 
 # ---------------------------------------------------------------------------
-# Main Analysis Loop
+# Full Dataset Analysis
 # ---------------------------------------------------------------------------
 
-def run_analysis(df: pd.DataFrame) -> pd.DataFrame:
+def run_analysis(df, label):
     """
-    Run Mann–Kendall analysis across all 45 AP exam subjects.
-
-    Iterates over all exam columns (i.e., all columns except 'Year'),
-    calls analyze_exam() for each, and collects results into a DataFrame.
+    Run Mann-Kendall analysis across all AP exam columns in a dataset.
 
     Parameters
     ----------
     df : pd.DataFrame
-        Prepared DataFrame with 'Year' column and one column per exam.
+        Prepared DataFrame from load_and_prepare().
+    label : str
+        Display label for output (e.g., 'MFR-P').
 
     Returns
     -------
     pd.DataFrame
-        Results table with one row per AP exam and columns for all
-        Mann–Kendall statistics and descriptive measures.
+        One row per AP exam with all Mann-Kendall statistics.
     """
-    years = df['Year']
-    results = []
+    rows = []
+    for col in df.columns[1:]:      # Skip 'Year'
+        result = analyze_exam(df[col])
+        result['Exam'] = col
+        rows.append(result)
 
-    exam_columns = df.columns[1:]  # Skip the 'Year' column
+    results_df = pd.DataFrame(rows)
+    col_order = ['Exam', 'Trend', 'p', 'slope', 'z', 'intercept',
+                 'Tau', 's', 'var_s', 'minimum', 'maximum', 'mean', 'SD', 'n']
+    results_df = results_df[col_order].reset_index(drop=True)
 
-    for col in exam_columns:
-        print(f"  Analyzing: {col} ...", flush=True)
-        stats_dict = analyze_exam(df[col], years)
-        stats_dict['exam'] = col
-        results.append(stats_dict)
-
-    # Build results DataFrame with a logical column order
-    results_df = pd.DataFrame(results)
-    column_order = [
-        'exam', 'trend', 'p', 'slope', 'z', 'Tau', 's', 'var_s',
-        'intercept', 'minimum', 'maximum', 'mean', 'std_dev', 'n_obs'
-    ]
-    return results_df[column_order]
+    sig = (results_df['p'] < 0.05).sum()
+    print(f"  [{label}] {len(results_df)} exams | Significant (p < .05): {sig}/{len(results_df)}")
+    return results_df
 
 
-def print_results(results_df: pd.DataFrame) -> None:
+# ---------------------------------------------------------------------------
+# Spearman Correlation (RQ3)
+# ---------------------------------------------------------------------------
+
+def run_spearman(df_par, df_ta):
     """
-    Print a human-readable summary of results to the console.
+    Compute Spearman rank correlation between MFR-P and MFR-TA for each exam.
+
+    Spearman's rho is used because it makes no linearity assumption and is
+    robust to outliers -- appropriate for MFR index values.
 
     Parameters
     ----------
-    results_df : pd.DataFrame
-        Output from run_analysis().
+    df_par : pd.DataFrame   Prepared MFR-P dataset (participation).
+    df_ta  : pd.DataFrame   Prepared MFR-TA dataset (top achievement).
+
+    Returns
+    -------
+    pd.DataFrame
+        Spearman rho, p-value, significance flag, and n for each AP exam.
     """
-    separator = "-" * 60
-    print("\n" + "=" * 60)
-    print("  MANN–KENDALL TREND ANALYSIS RESULTS")
-    print("  AP Exam Gender Disparity (MFR Index), 1997–2020")
-    print("=" * 60)
+    rows = []
+    for col in df_par.columns[1:]:
+        combined = pd.DataFrame({
+            'MFR_P':  df_par[col].values,
+            'MFR_TA': df_ta[col].values if col in df_ta.columns else np.nan
+        }).dropna()
+
+        if len(combined) >= 4:
+            rho, p_val = stats.spearmanr(combined['MFR_P'], combined['MFR_TA'])
+        else:
+            rho, p_val = np.nan, np.nan
+
+        rows.append({
+            'Exam':        col,
+            'rho':         round(rho, 3) if not np.isnan(rho) else None,
+            'p-value':     round(p_val, 3) if not np.isnan(p_val) else None,
+            'Significant': bool(p_val < 0.05) if not np.isnan(p_val) else None,
+            'n':           len(combined),
+        })
+
+    return pd.DataFrame(rows)
+
+
+# ---------------------------------------------------------------------------
+# Results Printing
+# ---------------------------------------------------------------------------
+
+def print_results(results_df, label):
+    """Print a formatted Mann-Kendall results summary to the console."""
+    sep = "-" * 65
+    print(f"\n{'=' * 65}")
+    print(f"  MANN-KENDALL RESULTS -- {label}")
+    print(f"  AP Exam Gender Disparity (1997-2020)")
+    print(f"{'=' * 65}")
 
     for _, row in results_df.iterrows():
-        print(f"\nExam:          {row['exam']}")
-        print(f"Trend:         {row['trend']}")
-        print(f"p-value:       {row['p']}")
-        print(f"Sen's Slope:   {row['slope']}  (MFR units/year)")
-        print(f"Z-score:       {row['z']}")
-        print(f"Tau:           {row['Tau']}")
-        print(f"S statistic:   {row['s']}")
-        print(f"Var(S):        {row['var_s']}")
-        print(f"Intercept:     {row['intercept']}")
-        print(f"Min (non-0):   {row['minimum']}")
-        print(f"Max (non-0):   {row['maximum']}")
-        print(f"Mean:          {row['mean']}")
-        print(f"Std Dev:       {row['std_dev']}")
-        print(f"N obs:         {row['n_obs']}")
-        print(separator)
+        if row['Trend'] == 'insufficient data':
+            print(f"\n{row['Exam']}: insufficient data (n={row['n']})")
+            continue
+        print(f"\nExam:        {row['Exam']}")
+        print(f"Trend:       {row['Trend']}")
+        print(f"p-value:     {row['p']}")
+        print(f"Sen's Slope: {row['slope']}  (MFR units/year)")
+        print(f"Z-score:     {row['z']}")
+        print(f"Tau:         {row['Tau']}")
+        print(f"S:           {row['s']}")
+        print(f"Var(S):      {row['var_s']}")
+        print(f"Min:         {row['minimum']}")
+        print(f"Max:         {row['maximum']}")
+        print(f"Mean:        {row['mean']}")
+        print(f"SD:          {row['SD']}")
+        print(f"N obs:       {row['n']}")
+        print(sep)
 
 
 # ---------------------------------------------------------------------------
@@ -231,58 +277,83 @@ def print_results(results_df: pd.DataFrame) -> None:
 def main():
     parser = argparse.ArgumentParser(
         description=(
-            "Mann–Kendall trend analysis and Sen's slope for AP exam "
-            "gender disparity data (MFR-P and MFR-TA indices)."
-        )
+            "Mann-Kendall trend analysis for AP exam gender disparity data.\n\n"
+            "Provide one file for MK analysis only, or both files to also\n"
+            "compute Spearman correlations between MFR-P and MFR-TA.\n\n"
+            "Examples:\n"
+            "  python analyze_trends.py participation.csv\n"
+            "  python analyze_trends.py top_achievement.csv\n"
+            "  python analyze_trends.py participation.csv top_achievement.csv --output results"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter
     )
     parser.add_argument(
-        'csv_path',
-        help="Path to the input CSV file (e.g., 'tapar.csv')"
+        'csv_files', nargs='+',
+        help="One or two CSV files: participation.csv and/or top_achievement.csv"
     )
     parser.add_argument(
-        '--output',
-        default=None,
-        help=(
-            "Optional: path prefix for saving results. "
-            "Creates <prefix>.csv and <prefix>.xlsx "
-            "(e.g., --output results → results.csv + results.xlsx)"
-        )
+        '--output', default=None,
+        help="Prefix for output files (e.g., --output results)"
     )
     args = parser.parse_args()
 
-    # -----------------------------------------------------------------------
-    # Step 1: Load and prepare data
-    # -----------------------------------------------------------------------
-    print(f"\nLoading data from: {args.csv_path}")
-    try:
-        df = load_and_prepare(args.csv_path)
-    except FileNotFoundError:
-        print(f"ERROR: File not found: {args.csv_path}", file=sys.stderr)
-        sys.exit(1)
+    all_results = {}
 
-    print(f"Data loaded: {df.shape[0]} years × {df.shape[1] - 1} AP exams")
-    print(f"Year range:  {int(df['Year'].min())} – {int(df['Year'].max())}")
+    # Run Mann-Kendall for each provided file
+    for csv_path in args.csv_files:
+        if 'participation' in csv_path.lower():
+            label = 'MFR-P (Participation)'
+            suffix = 'participation'
+        elif 'achievement' in csv_path.lower():
+            label = 'MFR-TA (Top Achievement)'
+            suffix = 'top_achievement'
+        else:
+            label = csv_path
+            suffix = csv_path.replace('.csv', '')
 
-    # -----------------------------------------------------------------------
-    # Step 2: Run Mann–Kendall analysis for all exams
-    # -----------------------------------------------------------------------
-    print("\nRunning Mann–Kendall tests...")
-    results_df = run_analysis(df)
+        print(f"\nLoading: {csv_path}")
+        try:
+            df = load_and_prepare(csv_path)
+        except FileNotFoundError:
+            print(f"ERROR: File not found: {csv_path}", file=sys.stderr)
+            sys.exit(1)
 
-    # -----------------------------------------------------------------------
-    # Step 3: Print results to console
-    # -----------------------------------------------------------------------
-    print_results(results_df)
+        print(f"  {df.shape[0]} years x {df.shape[1]-1} exams  |  "
+              f"Years: {int(df['Year'].min())}-{int(df['Year'].max())}")
 
-    # -----------------------------------------------------------------------
-    # Step 4: Optionally save results to CSV and Excel
-    # -----------------------------------------------------------------------
-    if args.output:
-        csv_out = f"{args.output}.csv"
-        xlsx_out = f"{args.output}.xlsx"
-        results_df.to_csv(csv_out, index=False)
-        results_df.to_excel(xlsx_out, index=False)
-        print(f"\nResults saved to:\n  {csv_out}\n  {xlsx_out}")
+        print(f"\nRunning Mann-Kendall tests...")
+        results_df = run_analysis(df, label)
+        print_results(results_df, label)
+        all_results[label] = (df, results_df, suffix)
+
+        if args.output:
+            csv_out  = f"{args.output}_{suffix}.csv"
+            xlsx_out = f"{args.output}_{suffix}.xlsx"
+            results_df.to_csv(csv_out, index=False)
+            results_df.to_excel(xlsx_out, index=False)
+            print(f"\n  Saved: {csv_out}  and  {xlsx_out}")
+
+    # Run Spearman correlation if both files were provided
+    if len(all_results) == 2:
+        items = list(all_results.values())
+        # Determine which is participation and which is top achievement
+        df_par = items[0][0] if 'Participation' in list(all_results.keys())[0] else items[1][0]
+        df_ta  = items[1][0] if 'Achievement'   in list(all_results.keys())[1] else items[0][0]
+
+        print(f"\n{'=' * 65}")
+        print(f"  SPEARMAN CORRELATION (RQ3) -- MFR-P vs MFR-TA")
+        print(f"{'=' * 65}")
+        spearman_df = run_spearman(df_par, df_ta)
+        sig = spearman_df['Significant'].sum()
+        print(f"  Significant (p < .05): {sig}/{len(spearman_df)}\n")
+        print(spearman_df.to_string(index=False))
+
+        if args.output:
+            sp_csv  = f"{args.output}_spearman.csv"
+            sp_xlsx = f"{args.output}_spearman.xlsx"
+            spearman_df.to_csv(sp_csv, index=False)
+            spearman_df.to_excel(sp_xlsx, index=False)
+            print(f"\n  Saved: {sp_csv}  and  {sp_xlsx}")
 
     print("\nAnalysis complete.")
 
