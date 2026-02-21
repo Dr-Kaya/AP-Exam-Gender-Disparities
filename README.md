@@ -26,8 +26,10 @@ A Spearman's rank correlation analysis examines the relationship between MFR-P a
 AP-Exam-Gender-Disparities/
 ├── AP_Gender_Trend_Analysis.ipynb   # Main analysis notebook (run in Colab or Jupyter)
 ├── analyze_trends.py                # Command-line script for reproducible batch analysis
-├── tapar.csv                        # AP participation data (MFR-P and MFR-TA by subject/year)
+├── participation.csv                # MFR-P data — gender disparity in participation (1997–2020)
+├── top_achievement.csv              # MFR-TA data — gender disparity in top achievement (1997–2020)
 ├── requirements.txt                 # Python package dependencies
+├── LICENSE                          # MIT License
 └── README.md                        # This file
 ```
 
@@ -70,7 +72,8 @@ jupyter notebook AP_Gender_Trend_Analysis.ipynb
 ### Run the Command-Line Script
 
 ```bash
-python analyze_trends.py tapar.csv
+python analyze_trends.py participation.csv
+python analyze_trends.py top_achievement.csv
 ```
 
 This prints Mann–Kendall statistics and Sen's slope for each of the 45 AP exam subjects.
@@ -79,7 +82,7 @@ This prints Mann–Kendall statistics and Sen's slope for each of the 45 AP exam
 
 ## Data Description
 
-The dataset (`tapar.csv`) contains longitudinally structured data compiled from publicly available College Board AP reports spanning **1997–2020**. The file is organized with AP exam subjects as columns and years as rows. Each cell contains the computed disparity index (MFR-P or MFR-TA) for that subject in that year.
+Two datasets are included, both compiled from publicly available College Board AP reports spanning **1997–2020**. Each file is organized with AP exam subjects as rows and years as columns. Each cell contains the computed MFR index for that subject in that year.
 
 | Field | Description |
 |---|---|
