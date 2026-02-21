@@ -1,6 +1,6 @@
 # Gender Disparities in Advanced Placement (AP) Exams: Trend Analysis
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Dr-Kaya/TrendAnalysis/blob/main/AP_Gender_Trend_Analysis.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Dr-Kaya/AP-Exam-Gender-Disparities/blob/main/AP_Gender_Trend_Analysis.ipynb)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ---
@@ -23,7 +23,7 @@ A Spearman's rank correlation analysis examines the relationship between MFR-P a
 ## Repository Structure
 
 ```
-TrendAnalysis/
+AP-Exam-Gender-Disparities/
 ├── AP_Gender_Trend_Analysis.ipynb   # Main analysis notebook (run in Colab or Jupyter)
 ├── analyze_trends.py                # Command-line script for reproducible batch analysis
 ├── tapar.csv                        # AP participation data (MFR-P and MFR-TA by subject/year)
@@ -37,7 +37,7 @@ TrendAnalysis/
 
 Click the badge below to open the notebook directly in Google Colab:
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Dr-Kaya/TrendAnalysis/blob/main/AP_Gender_Trend_Analysis.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Dr-Kaya/AP-Exam-Gender-Disparities/blob/main/AP_Gender_Trend_Analysis.ipynb)
 
 The notebook installs all dependencies automatically, loads the data directly from this GitHub repository, and walks through the full analysis step by step.
 
@@ -54,8 +54,8 @@ The notebook installs all dependencies automatically, loads the data directly fr
 
 ```bash
 # Clone the repository
-git clone https://github.com/Dr-Kaya/TrendAnalysis.git
-cd TrendAnalysis
+git clone https://github.com/Dr-Kaya/AP-Exam-Gender-Disparities.git
+cd AP-Exam-Gender-Disparities
 
 # Install dependencies
 pip install -r requirements.txt
@@ -149,4 +149,4 @@ This project is licensed under the [MIT License](LICENSE).
 
 ## Contact
 
-For questions about the code or analysis, please open an [Issue](https://github.com/Dr-Kaya/TrendAnalysis/issues) in this repository.
+For questions about the code or analysis, please open an [Issue](https://github.com/Dr-Kaya/AP-Exam-Gender-Disparities/issues) in this repository.
