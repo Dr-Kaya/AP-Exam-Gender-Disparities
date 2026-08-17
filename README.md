@@ -126,7 +126,7 @@ Install all at once: `pip install -r requirements.txt`
 If you use this code or data in your research, please cite:
 
 ```
-Bahar, A. K., Mjavanadze, E., Kaya, E., Sipahi, Y., & Aydin, U. (2026). Mapping gender disparities in advanced academics: Participation and top achievement trends across advanced placement exams. _Journal of Educational Psychology_. Advance online publication. https://doi.org/10.1037/edu0001070 
+Bahar, A. K., Mjavanadze, E., Kaya, E., Sipahi, Y., & Aydin, U. (2026). Mapping gender disparities in advanced academics: Participation and top achievement trends across advanced placement exams. Journal of Educational Psychology. Advance online publication. https://doi.org/10.1037/edu0001070 
 ```
 
 ---
